@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rota de Entregas · Leitor de Lista + Google Maps</title>
+<style>
+  :root{
+    --bg:#0f1614; --panel:#16211e; --panel-2:#1c2b27; --line:#2a3d38;
+    --ink:#eef3f1; --ink-dim:#9db3ac; --accent:#ffb454; --accent-2:#5fd4a4;
+    --danger:#e8756a; --mono:'JetBrains Mono','Courier New',monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;min-height:100vh;}
+  header{padding:36px 24px 20px;max-width:1000px;margin:0 auto;border-bottom:1px solid var(--line);}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.12em;color:var(--accent-2);text-transform:uppercase;margin-bottom:8px;}
+  h1{font-size:26px;margin:0 0 6px;font-weight:700;letter-spacing:-0.01em;}
+  .sub{color:var(--ink-dim);font-size:14px;max-width:660px;}
+  main{max-width:1000px;margin:0 auto;padding:28px 24px 80px;}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px;}
+  .step[data-locked="true"]{opacity:.4;pointer-events:none;}
+  .step-num{font-family:var(--mono);font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;margin-right:10px;}
+  .step h2{font-size:16.5px;margin:0 0 4px;display:inline-flex;align-items:center;gap:0;}
+  .step-desc{color:var(--ink-dim);font-size:13.5px;margin:0 0 16px 32px;}
+  .step-body{margin-left:32px;}
+  input[type=file]{display:block;width:100%;padding:14px;background:var(--panel-2);border:1.5px dashed var(--line);border-radius:10px;color:var(--ink-dim);font-family:var(--sans);font-size:13.5px;cursor:pointer;}
+  input[type=text],input[type=password]{width:100%;padding:11px 13px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;color:var(--ink);font-family:var(--mono);font-size:12.5px;}
+  input[type=text]:focus,input[type=password]:focus{outline:1.5px solid var(--accent-2);}
+  label.small{display:block;font-size:12.5px;color:var(--ink-dim);margin-bottom:6px;}
+  button{background:var(--accent);color:#1a1410;border:none;border-radius:8px;padding:11px 20px;font-weight:600;font-size:13.5px;cursor:pointer;font-family:var(--sans);}
+  button.secondary{background:transparent;color:var(--accent-2);border:1px solid var(--accent-2);}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button:hover:not(:disabled){filter:brightness(1.08);}
+  .progress-wrap{margin-top:14px;display:none;}
+  .progress-bar{height:6px;background:var(--panel-2);border-radius:99px;overflow:hidden;border:1px solid var(--line);}
+  .progress-fill{height:100%;width:0%;background:var(--accent-2);transition:width .2s;}
+  .progress-label{font-family:var(--mono);font-size:11.5px;color:var(--ink-dim);margin-top:6px;}
+  .hint{font-size:12px;color:var(--ink-dim);margin-top:8px;}
+  .count-badge{display:inline-block;font-family:var(--mono);font-size:11.5px;color:var(--accent);background:rgba(255,180,84,.1);border:1px solid rgba(255,180,84,.3);padding:2px 8px;border-radius:99px;margin-left:8px;}
+  .error-box{background:rgba(232,117,106,.1);border:1px solid rgba(232,117,106,.4);color:#ffb4ac;padding:10px 14px;border-radius:8px;font-size:13px;margin-top:12px;display:none;}
+  .warn-box{background:rgba(255,180,84,.08);border:1px solid rgba(255,180,84,.3);color:var(--accent);padding:10px 14px;border-radius:8px;font-size:12.5px;margin-top:12px;display:none;}
+
+  table.rows-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;}
+  table.rows-table th{text-align:left;font-family:var(--mono);font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);}
+  table.rows-table td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
+  table.rows-table td.seq{font-family:var(--mono);color:var(--ink-dim);width:32px;}
+  table.rows-table td.dest{color:var(--ink-dim);width:190px;max-width:190px;}
+  table.rows-table td.addr input{width:100%;}
+  .table-scroll{max-height:480px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:2px 10px;}
+  .row-check{width:16px;height:16px;accent-color:var(--accent-2);}
+
+  #map{width:100%;height:380px;border-radius:10px;margin-top:16px;border:1px solid var(--line);display:none;}
+  .batch-block{border-top:1px solid var(--line);padding-top:14px;margin-top:14px;}
+  .batch-title{font-family:var(--mono);font-size:12px;color:var(--accent-2);margin-bottom:8px;}
+  .order-item{display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;}
+  .order-item:last-child{border-bottom:none;}
+  .order-idx{font-family:var(--mono);color:var(--accent-2);min-width:22px;}
+  .actions-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center;}
+  .maps-link{display:inline-flex;align-items:center;gap:8px;text-decoration:none;background:var(--accent-2);color:#0e2118;padding:9px 16px;border-radius:8px;font-weight:600;font-size:13px;}
+  footer{max-width:1000px;margin:0 auto;padding:0 24px 60px;color:var(--ink-dim);font-size:12px;}
+  a{color:var(--accent-2);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Lista de entregas → Rota otimizada</div>
+  <h1>Da lista em PDF até a rota no Google Maps</h1>
+  <p class="sub">Suba a lista de entregas em PDF. O site lê o texto embutido no PDF (ou faz OCR automaticamente se for uma imagem escaneada), organiza os endereços em tabela pra você revisar, e monta a melhor ordem de visita já pronta pra abrir no Maps.</p>
+</header>
+
+<main>
+
+  <div class="step" id="step1">
+    <h2><span class="step-num">1</span>Enviar o PDF</h2>
+    <p class="step-desc">Processado localmente no seu navegador — nada é enviado a servidores externos.</p>
+    <div class="step-body">
+      <input type="file" id="pdfInput" accept="application/pdf">
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-label" id="progressLabel">Aguardando...</div>
+      </div>
+      <div class="error-box" id="step1Error"></div>
+    </div>
+  </div>
+
+  <div class="step" id="step2" data-locked="true">
+    <h2><span class="step-num">2</span>Revisar endereços<span class="count-badge" id="addrCount" style="display:none"></span></h2>
+    <p class="step-desc">Confira o endereço de cada linha. Desmarque paradas que não quer incluir (ex: duplicadas). Edite o texto se algo veio errado.</p>
+    <div class="step-body">
+      <div class="warn-box" id="parseWarn"></div>
+      <div class="table-scroll">
+        <table class="rows-table" id="rowsTable">
+          <thead><tr><th></th><th>#</th><th>Destinatário</th><th>Endereço completo (para geocodificação)</th></tr></thead>
+          <tbody id="rowsTbody"></tbody>
+        </table>
+      </div>
+      <div class="hint">O endereço completo já inclui bairro e CEP formatado, o que ajuda bastante a geocodificação a acertar de primeira.</div>
+    </div>
+  </div>
+
+  <div class="step" id="step3" data-locked="true">
+    <h2><span class="step-num">3</span>Traçar a melhor rota</h2>
+    <p class="step-desc">Requer uma Google Maps API Key sua (Maps JavaScript API + Directions API habilitadas, billing ativo). Fica só no seu navegador.</p>
+    <div class="step-body">
+      <label class="small">Sua Google Maps API Key</label>
+      <input type="password" id="apiKey" placeholder="AIzaSy...">
+      <div class="actions-row">
+        <button id="routeBtn">Calcular rota otimizada</button>
+      </div>
+      <div class="error-box" id="step3Error"></div>
+      <div class="warn-box" id="chunkWarn"></div>
+      <div id="map"></div>
+      <div id="batchesContainer"></div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  Leitura de texto via PDF.js, OCR de reserva via Tesseract.js (só entra em ação se o PDF for uma imagem escaneada), rota via Google Maps Directions API. A API do Google limita rotas a 25 pontos por vez — listas maiores são divididas automaticamente em trechos encadeados (o fim de um trecho é o início do próximo).
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const pdfInput = document.getElementById('pdfInput');
+const progressWrap = document.getElementById('progressWrap');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+const step1Error = document.getElementById('step1Error');
+const step2 = document.getElementById('step2');
+const step3 = document.getElementById('step3');
+const addrCount = document.getElementById('addrCount');
+const parseWarn = document.getElementById('parseWarn');
+const rowsTbody = document.getElementById('rowsTbody');
+const routeBtn = document.getElementById('routeBtn');
+const apiKeyInput = document.getElementById('apiKey');
+const step3Error = document.getElementById('step3Error');
+const chunkWarn = document.getElementById('chunkWarn');
+const mapDiv = document.getElementById('map');
+const batchesContainer = document.getElementById('batchesContainer');
+
+function showError(el, msg){ el.textContent = msg; el.style.display = 'block'; }
+function hideError(el){ el.style.display = 'none'; }
+function showWarn(el, msg){ el.textContent = msg; el.style.display = 'block'; }
+
+function norm(s){
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+}
+
+function formatCep(raw){
+  const digits = raw.replace(/\D/g,'');
+  if(digits.length === 0) return '';
+  let d = digits;
+  if(d.length === 7) d = '0' + d;
+  if(d.length === 8) return d.slice(0,5) + '-' + d.slice(5);
+  return digits;
+}
+
+// ---------- PDF parsing: table-aware text extraction ----------
+async function parseTableFromPdf(pdf){
+  const HEADER_KEYS = ['SEQ','CODIGO','DESTINATARIO','ENDERECO','BAIRRO','CEP'];
+  let rows = [];
+  let totalCharCount = 0;
+
+  for(let p = 1; p <= pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const items = content.items.map(it => ({
+      str: it.str,
+      x: it.transform[4],
+      y: it.transform[5]
+    })).filter(it => it.str.trim().length > 0);
+
+    totalCharCount += items.reduce((a,it)=>a+it.str.length,0);
+    if(items.length === 0) continue;
+
+    // find header x-positions on this page
+    const headerX = {};
+    items.forEach(it => {
+      const t = norm(it.str);
+      if(HEADER_KEYS.includes(t) && headerX[t] === undefined){
+        headerX[t] = it.x;
+      }
+    });
+    const cols = Object.entries(headerX).sort((a,b) => a[1]-b[1]);
+    if(cols.length < 4) continue; // header not found on this page, skip (can't map columns reliably)
+
+    function colFor(x){
+      let chosen = cols[0][0];
+      for(const [name, cx] of cols){
+        if(x >= cx - 5) chosen = name; else break;
+      }
+      return chosen;
+    }
+
+    // group items into lines by y
+    const sorted = [...items].sort((a,b) => b.y - a.y || a.x - b.x);
+    const lines = [];
+    let curLine = null;
+    for(const it of sorted){
+      if(curLine && Math.abs(it.y - curLine.y) < 3){
+        curLine.items.push(it);
+      } else {
+        curLine = {y: it.y, items: [it]};
+        lines.push(curLine);
+      }
+    }
+
+    let currentRow = null;
+    let lastSeq = 0;
+    for(const line of lines){
+      const byCol = {};
+      line.items.sort((a,b)=>a.x-b.x).forEach(it => {
+        const c = colFor(it.x);
+        byCol[c] = (byCol[c] ? byCol[c] + ' ' : '') + it.str.trim();
+      });
+
+      const seqToken = byCol['SEQ'] ? byCol['SEQ'].replace(/\D/g,'') : '';
+      const seqNum = seqToken ? parseInt(seqToken, 10) : NaN;
+      const isNewRow = !isNaN(seqNum) && seqNum > 0 && seqNum < 5000 && seqNum >= lastSeq;
+
+      if(isNewRow){
+        if(currentRow) rows.push(currentRow);
+        currentRow = {
+          seq: seqNum,
+          destinatario: byCol['DESTINATARIO'] || '',
+          endereco: byCol['ENDERECO'] || '',
+          bairro: byCol['BAIRRO'] || '',
+          cep: byCol['CEP'] || ''
+        };
+        lastSeq = seqNum;
+      } else if(currentRow){
+        // continuation line: append text to matching columns (skip footer/header noise lines)
+        if(byCol['DESTINATARIO']) currentRow.destinatario += ' ' + byCol['DESTINATARIO'];
+        if(byCol['ENDERECO']) currentRow.endereco += ' ' + byCol['ENDERECO'];
+        if(byCol['BAIRRO']) currentRow.bairro += ' ' + byCol['BAIRRO'];
+        if(byCol['CEP']) currentRow.cep += byCol['CEP'];
+      }
+    }
+    if(currentRow) rows.push(currentRow);
+  }
+
+  return {rows, totalCharCount};
+}
+
+function buildFullAddress(row){
+  const parts = [];
+  if(row.endereco) parts.push(row.endereco.trim());
+  if(row.bairro) parts.push(row.bairro.trim());
+  const cepFmt = formatCep(row.cep || '');
+  let addr = parts.join(', ');
+  if(cepFmt) addr += (addr ? ', CEP ' : 'CEP ') + cepFmt;
+  addr += ', Brasil';
+  return addr;
+}
+
+function renderRowsTable(rows){
+  rowsTbody.innerHTML = '';
+  rows.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="checkbox" class="row-check" checked data-idx="${idx}"></td>
+      <td class="seq">${row.seq || idx+1}</td>
+      <td class="dest">${row.destinatario || ''}</td>
+      <td class="addr"><input type="text" value="${buildFullAddress(row).replace(/"/g,'&quot;')}" data-idx="${idx}"></td>
+    `;
+    rowsTbody.appendChild(tr);
+  });
+  addrCount.style.display = 'inline-block';
+  addrCount.textContent = rows.length + ' endereço(s)';
+}
+
+function getSelectedAddresses(){
+  const checks = rowsTbody.querySelectorAll('.row-check');
+  const list = [];
+  checks.forEach(chk => {
+    if(chk.checked){
+      const idx = chk.dataset.idx;
+      const input = rowsTbody.querySelector(`input[type=text][data-idx="${idx}"]`);
+      const val = input.value.trim();
+      if(val) list.push(val);
+    }
+  });
+  return list;
+}
+
+// ---------- Fallback OCR path (only if PDF has no usable text layer) ----------
+async function ocrFallback(pdf){
+  const worker = await Tesseract.createWorker('por');
+  const lines = [];
+  for(let i=1;i<=pdf.numPages;i++){
+    progressLabel.textContent = `OCR: página ${i} de ${pdf.numPages}...`;
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({scale:2.2});
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({canvasContext: ctx, viewport}).promise;
+    const {data} = await worker.recognize(canvas);
+    data.text.split('\n').map(l=>l.trim()).filter(l=>l.length>4).forEach(l=>lines.push(l));
+    progressFill.style.width = Math.round((i/pdf.numPages)*100)+'%';
+  }
+  await worker.terminate();
+  return lines.map((l,idx) => ({seq: idx+1, destinatario:'', endereco:l, bairro:'', cep:''}));
+}
+
+pdfInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  hideError(step1Error);
+  parseWarn.style.display = 'none';
+  progressWrap.style.display = 'block';
+  progressFill.style.width = '0%';
+  progressLabel.textContent = 'Lendo PDF...';
+
+  try{
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+
+    progressLabel.textContent = 'Extraindo texto do PDF...';
+    let {rows, totalCharCount} = await parseTableFromPdf(pdf);
+
+    if(totalCharCount < 50 || rows.length === 0){
+      showWarn(parseWarn, 'O PDF parece ser uma imagem escaneada (sem texto embutido) ou o layout da tabela não foi reconhecido automaticamente. Rodando OCR como alternativa — revise a lista com atenção redobrada, pois o OCR pode errar números.');
+      progressWrap.style.display = 'block';
+      rows = await ocrFallback(pdf);
+    } else {
+      progressFill.style.width = '100%';
+      progressLabel.textContent = `Concluído: ${rows.length} linha(s) lida(s) diretamente do texto do PDF.`;
+    }
+
+    renderRowsTable(rows);
+    step2.removeAttribute('data-locked');
+    step3.removeAttribute('data-locked');
+
+  }catch(err){
+    console.error(err);
+    showError(step1Error, 'Não foi possível processar o PDF: ' + err.message);
+    progressWrap.style.display = 'none';
+  }
+});
+
+// ---------- Route calculation with 25-stop chunking ----------
+let gmapsLoaded = false;
+function loadGoogleMaps(key){
+  return new Promise((resolve, reject) => {
+    if(gmapsLoaded && window.google && window.google.maps){ resolve(); return; }
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=geometry`;
+    script.onload = () => { gmapsLoaded = true; resolve(); };
+    script.onerror = () => reject(new Error('Falha ao carregar a API do Google Maps. Verifique a chave.'));
+    document.head.appendChild(script);
+  });
+}
+
+function makeChunks(addresses, maxPerChunk){
+  const chunks = [];
+  let start = 0;
+  if(addresses.length <= maxPerChunk){ return [addresses]; }
+  while(start < addresses.length - 1){
+    const end = Math.min(start + maxPerChunk - 1, addresses.length - 1);
+    chunks.push(addresses.slice(start, end+1));
+    if(end === addresses.length - 1) break;
+    start = end;
+  }
+  return chunks;
+}
+
+function routeOneChunk(directionsService, chunk){
+  return new Promise((resolve, reject) => {
+    const origin = chunk[0];
+    const destination = chunk[chunk.length-1];
+    const waypointAddrs = chunk.slice(1,-1);
+    const request = {
+      origin, destination,
+      waypoints: waypointAddrs.map(a => ({location:a, stopover:true})),
+      optimizeWaypoints: true,
+      travelMode: google.maps.TravelMode.DRIVING
+    };
+    directionsService.route(request, (result, status) => {
+      if(status !== 'OK'){ reject(new Error(status)); return; }
+      const order = result.routes[0].waypoint_order;
+      const orderedAddresses = [origin, ...order.map(i => waypointAddrs[i]), destination];
+      resolve({result, orderedAddresses, origin, destination, waypointAddrs, order});
+    });
+  });
+}
+
+routeBtn.addEventListener('click', async () => {
+  hideError(step3Error);
+  chunkWarn.style.display = 'none';
+  batchesContainer.innerHTML = '';
+  const key = apiKeyInput.value.trim();
+  const addresses = getSelectedAddresses();
+
+  if(!key){ showError(step3Error, 'Cole sua Google Maps API Key primeiro.'); return; }
+  if(addresses.length < 2){ showError(step3Error, 'Inclua pelo menos 2 endereços marcados.'); return; }
+
+  routeBtn.disabled = true;
+  routeBtn.textContent = 'Calculando...';
+
+  try{
+    await loadGoogleMaps(key);
+
+    const chunks = makeChunks(addresses, 25);
+    if(chunks.length > 1){
+      showWarn(chunkWarn, `A lista tem ${addresses.length} paradas, acima do limite de 25 pontos por rota do Google. Dividida automaticamente em ${chunks.length} trechos encadeados — o fim de um trecho é o início do próximo.`);
+    }
+
+    mapDiv.style.display = 'block';
+    const map = new google.maps.Map(mapDiv, {
+      zoom: 12,
+      center: {lat: -18.9186, lng: -48.2772},
+      styles: [{elementType:'geometry', stylers:[{color:'#16211e'}]},
+               {elementType:'labels.text.stroke', stylers:[{color:'#16211e'}]},
+               {elementType:'labels.text.fill', stylers:[{color:'#9db3ac'}]}]
+    });
+
+    const directionsService = new google.maps.DirectionsService();
+    const colors = ['#ffb454','#5fd4a4','#7aa2f7','#e8756a','#c39bd3','#f5d76e'];
+
+    for(let i=0;i<chunks.length;i++){
+      const chunk = chunks[i];
+      try{
+        const {result, orderedAddresses, order} = await routeOneChunk(directionsService, chunk);
+        const renderer = new google.maps.DirectionsRenderer({
+          suppressMarkers:false,
+          polylineOptions:{strokeColor: colors[i % colors.length], strokeWeight:5}
+        });
+        renderer.setMap(map);
+        renderer.setDirections(result);
+
+        const waypointAddrs = chunk.slice(1,-1);
+        const gmapsUrl = 'https://www.google.com/maps/dir/?api=1'
+          + '&origin=' + encodeURIComponent(chunk[0])
+          + '&destination=' + encodeURIComponent(chunk[chunk.length-1])
+          + (order.length ? '&waypoints=' + order.map(idx => encodeURIComponent(waypointAddrs[idx])).join('|') : '')
+          + '&travelmode=driving';
+
+        const block = document.createElement('div');
+        block.className = 'batch-block';
+        let orderHtml = orderedAddresses.map((a,idx) => `<div class="order-item"><span class="order-idx">${idx+1}.</span><span>${a}</span></div>`).join('');
+        block.innerHTML = `
+          <div class="batch-title">Trecho ${i+1} de ${chunks.length} (${chunk.length} paradas)</div>
+          ${orderHtml}
+          <div class="actions-row"><a class="maps-link" href="${gmapsUrl}" target="_blank">Abrir trecho ${i+1} no Google Maps →</a></div>
+        `;
+        batchesContainer.appendChild(block);
+      }catch(err){
+        const block = document.createElement('div');
+        block.className = 'batch-block';
+        block.innerHTML = `<div class="batch-title">Trecho ${i+1} de ${chunks.length}</div><div class="error-box" style="display:block">Erro ao calcular este trecho: ${err.message}. Verifique se os endereços estão completos.</div>`;
+        batchesContainer.appendChild(block);
+      }
+    }
+
+  }catch(err){
+    console.error(err);
+    showError(step3Error, err.message);
+  }finally{
+    routeBtn.disabled = false;
+    routeBtn.textContent = 'Calcular rota otimizada';
+  }
+});
+</script>
+
+</body>
+</html>
