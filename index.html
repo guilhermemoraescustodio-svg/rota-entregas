@@ -47,7 +47,10 @@
   table.rows-table td.seq{font-family:var(--mono);color:var(--ink-dim);width:32px;}
   table.rows-table td.dest{width:190px;max-width:190px;}
   table.rows-table td.dest input{width:100%;color:var(--ink-dim);}
-  table.rows-table td.addr input{width:100%;}
+  table.rows-table td.addr{position:relative;display:flex;align-items:center;gap:4px;}
+  table.rows-table td.addr input{flex:1;min-width:0;}
+  table.rows-table td.addr input.flagged{border-color:var(--danger);background:rgba(232,117,106,.06);}
+  .flag-badge{display:none;color:var(--danger);cursor:help;font-size:13px;flex-shrink:0;}
   .table-scroll{max-height:480px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:2px 10px;}
   .row-check{width:16px;height:16px;accent-color:var(--accent-2);}
 
@@ -278,6 +281,33 @@ function buildFullAddress(row){
   return addr;
 }
 
+function flagReasons(addr){
+  const reasons = [];
+  const streetKeywordRegex = /\b(RUA|AV|AVENIDA|ESTRADA|RODOVIA|TRAVESSA|ALAMEDA|ROD|VIA|PRACA)\b/gi;
+  const matches = addr.match(streetKeywordRegex) || [];
+  if(matches.length >= 2) reasons.push('parece ter 2 endereços colados (mais de uma "Rua/Av/Estrada" no texto)');
+  const cepMatches = addr.match(/\d{5}-?\d{3}/g) || [];
+  if(cepMatches.length >= 2) reasons.push('mais de um CEP encontrado no texto');
+  if(addr.length > 95) reasons.push('endereço bem mais longo que o normal — confira se não são 2 colados');
+  return reasons;
+}
+
+function updateRowFlag(tr){
+  const addrInput = tr.querySelector('td.addr input');
+  const badge = tr.querySelector('.flag-badge');
+  if(!addrInput || !badge) return;
+  const reasons = flagReasons(addrInput.value);
+  if(reasons.length > 0){
+    addrInput.classList.add('flagged');
+    badge.style.display = 'inline';
+    badge.title = 'Revisar: ' + reasons.join('; ');
+  } else {
+    addrInput.classList.remove('flagged');
+    badge.style.display = 'none';
+    badge.title = '';
+  }
+}
+
 let rowCounter = 0;
 
 function renderRowsTable(rows){
@@ -296,11 +326,19 @@ function appendRowToTable(seqLabel, destValue, addrValue){
     <td><input type="checkbox" class="row-check" checked data-idx="${idx}"></td>
     <td class="seq">${seqLabel}</td>
     <td class="dest"><input type="text" value="${String(destValue).replace(/"/g,'&quot;')}" data-idx="${idx}"></td>
-    <td class="addr"><input type="text" value="${String(addrValue).replace(/"/g,'&quot;')}" data-idx="${idx}"></td>
+    <td class="addr"><input type="text" value="${String(addrValue).replace(/"/g,'&quot;')}" data-idx="${idx}"><span class="flag-badge" title="">⚠</span></td>
   `;
   rowsTbody.appendChild(tr);
+  updateRowFlag(tr);
   return tr;
 }
+
+// live re-check as the person edits any address field
+rowsTbody.addEventListener('input', (e) => {
+  if(e.target.matches('td.addr input')){
+    updateRowFlag(e.target.closest('tr'));
+  }
+});
 
 function updateAddrCountLabel(){
   const total = rowsTbody.querySelectorAll('.row-check').length;
@@ -461,7 +499,21 @@ function routeOneChunk(directionsService, chunk){
       travelMode: google.maps.TravelMode.DRIVING
     };
     directionsService.route(request, (result, status) => {
-      if(status !== 'OK'){ reject(new Error(status)); return; }
+      if(status !== 'OK'){
+        // try to pinpoint exactly which address Google couldn't geocode
+        let detail = '';
+        if(result && Array.isArray(result.geocoded_waypoints) && result.geocoded_waypoints.length === chunk.length){
+          const badOnes = [];
+          result.geocoded_waypoints.forEach((gw, i) => {
+            if(gw.geocoder_status !== 'OK') badOnes.push(chunk[i]);
+          });
+          if(badOnes.length > 0){
+            detail = ' Endereço(s) que o Google não conseguiu localizar: ' + badOnes.map(a => `"${a}"`).join(', ');
+          }
+        }
+        reject(new Error(status + '.' + detail));
+        return;
+      }
       const order = result.routes[0].waypoint_order;
       const orderedAddresses = [origin, ...order.map(i => waypointAddrs[i]), destination];
       resolve({result, orderedAddresses, origin, destination, waypointAddrs, order});
