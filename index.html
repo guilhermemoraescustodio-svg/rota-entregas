@@ -99,6 +99,7 @@
       </div>
       <div class="actions-row">
         <button class="secondary" id="addRowBtn" type="button">+ Adicionar endereço manualmente</button>
+        <button class="secondary" id="exportXlsxBtn" type="button">Baixar como Excel (.xlsx)</button>
       </div>
       <div class="hint">O endereço completo já inclui bairro e CEP formatado, o que ajuda bastante a geocodificação a acertar de primeira.</div>
     </div>
@@ -126,6 +127,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -305,6 +307,37 @@ function updateAddrCountLabel(){
   addrCount.style.display = 'inline-block';
   addrCount.textContent = total + ' endereço(s)';
 }
+
+document.getElementById('exportXlsxBtn').addEventListener('click', () => {
+  const trs = rowsTbody.querySelectorAll('tr');
+  const data = [];
+  trs.forEach(tr => {
+    const check = tr.querySelector('.row-check');
+    const seq = tr.querySelector('td.seq').textContent.trim();
+    const dest = tr.querySelector('td.dest input').value.trim();
+    const addr = tr.querySelector('td.addr input').value.trim();
+    data.push({
+      '#': seq,
+      'Destinatário': dest,
+      'Endereço completo': addr,
+      'Incluída na rota': check && check.checked ? 'Sim' : 'Não'
+    });
+  });
+
+  if(data.length === 0){
+    showError(step1Error, 'Não há nenhuma linha pra exportar ainda.');
+    return;
+  }
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:6},{wch:32},{wch:55},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Entregas');
+
+  const today = new Date();
+  const stamp = today.toISOString().slice(0,10);
+  XLSX.writeFile(wb, `entregas_${stamp}.xlsx`);
+});
 
 document.getElementById('addRowBtn').addEventListener('click', () => {
   const seqCells = rowsTbody.querySelectorAll('td.seq');
