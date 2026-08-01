@@ -307,7 +307,14 @@ function updateAddrCountLabel(){
 }
 
 document.getElementById('addRowBtn').addEventListener('click', () => {
-  const tr = appendRowToTable('+', '', '');
+  const seqCells = rowsTbody.querySelectorAll('td.seq');
+  let nextSeq = seqCells.length + 1;
+  if(seqCells.length > 0){
+    const lastSeqText = seqCells[seqCells.length - 1].textContent.trim();
+    const lastSeqNum = parseInt(lastSeqText, 10);
+    if(!isNaN(lastSeqNum)) nextSeq = lastSeqNum + 1;
+  }
+  const tr = appendRowToTable(nextSeq, '', '');
   updateAddrCountLabel();
   tr.querySelector('td.addr input').focus();
   tr.scrollIntoView({behavior:'smooth', block:'center'});
