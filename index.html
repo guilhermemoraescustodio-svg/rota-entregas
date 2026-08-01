@@ -45,8 +45,9 @@
   table.rows-table th{text-align:left;font-family:var(--mono);font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);}
   table.rows-table td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
   table.rows-table td.seq{font-family:var(--mono);color:var(--ink-dim);width:32px;}
-  table.rows-table td.dest{width:190px;max-width:190px;}
-  table.rows-table td.dest input{width:100%;color:var(--ink-dim);}
+  table.rows-table td.dest{width:38%;}
+  table.rows-table td.dest textarea{width:100%;color:var(--ink-dim);font-family:var(--sans);font-size:13px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;resize:none;overflow:hidden;line-height:1.4;}
+  table.rows-table td.dest textarea:focus{outline:1.5px solid var(--accent-2);}
   table.rows-table td.addr{position:relative;display:flex;align-items:center;gap:4px;}
   table.rows-table td.addr input{flex:1;min-width:0;}
   table.rows-table td.addr input.flagged{border-color:var(--danger);background:rgba(232,117,106,.06);}
@@ -319,24 +320,33 @@ function renderRowsTable(rows){
   updateAddrCountLabel();
 }
 
+function autoResizeTextarea(el){
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
 function appendRowToTable(seqLabel, destValue, addrValue){
   const idx = rowCounter++;
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td><input type="checkbox" class="row-check" checked data-idx="${idx}"></td>
     <td class="seq">${seqLabel}</td>
-    <td class="dest"><input type="text" value="${String(destValue).replace(/"/g,'&quot;')}" data-idx="${idx}"></td>
+    <td class="dest"><textarea rows="1" data-idx="${idx}">${String(destValue).replace(/</g,'&lt;')}</textarea></td>
     <td class="addr"><input type="text" value="${String(addrValue).replace(/"/g,'&quot;')}" data-idx="${idx}"><span class="flag-badge" title="">⚠</span></td>
   `;
   rowsTbody.appendChild(tr);
   updateRowFlag(tr);
+  autoResizeTextarea(tr.querySelector('td.dest textarea'));
   return tr;
 }
 
-// live re-check as the person edits any address field
+// live re-check / auto-resize as the person edits fields
 rowsTbody.addEventListener('input', (e) => {
   if(e.target.matches('td.addr input')){
     updateRowFlag(e.target.closest('tr'));
+  }
+  if(e.target.matches('td.dest textarea')){
+    autoResizeTextarea(e.target);
   }
 });
 
@@ -352,7 +362,7 @@ document.getElementById('exportXlsxBtn').addEventListener('click', () => {
   trs.forEach(tr => {
     const check = tr.querySelector('.row-check');
     const seq = tr.querySelector('td.seq').textContent.trim();
-    const dest = tr.querySelector('td.dest input').value.trim();
+    const dest = tr.querySelector('td.dest textarea').value.trim();
     const addr = tr.querySelector('td.addr input').value.trim();
     data.push({
       '#': seq,
