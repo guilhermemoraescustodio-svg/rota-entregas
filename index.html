@@ -216,16 +216,25 @@ async function parseTableFromPdf(pdf){
 
     let currentRow = null;
     let lastSeq = 0;
+    const NOISE_KEYWORDS = ['TOTAL DE ENCOMENDAS','TOTAL EXPRESSOS','TOTAL DEMAIS','CONFERENTE','DATA:','HORA:','PAGINA','DOCUMENTO:','COURIER:','FRANQUIA','OPERADOR','LISTA '];
     for(const line of lines){
+      const lineItemsSorted = [...line.items].sort((a,b)=>a.x-b.x);
+      const lineText = norm(lineItemsSorted.map(it=>it.str).join(' '));
+
+      // skip footer/header noise lines entirely (don't merge into any row)
+      if(NOISE_KEYWORDS.some(kw => lineText.includes(kw))) continue;
+
       const byCol = {};
-      line.items.sort((a,b)=>a.x-b.x).forEach(it => {
+      lineItemsSorted.forEach(it => {
         const c = colFor(it.x);
         byCol[c] = (byCol[c] ? byCol[c] + ' ' : '') + it.str.trim();
       });
 
-      const seqToken = byCol['SEQ'] ? byCol['SEQ'].replace(/\D/g,'') : '';
-      const seqNum = seqToken ? parseInt(seqToken, 10) : NaN;
-      const isNewRow = !isNaN(seqNum) && seqNum > 0 && seqNum < 5000 && seqNum >= lastSeq;
+      // a new row only starts if the LEFTMOST token on the line is a short standalone
+      // number (the SEQ column) — avoids false merges when a tracking code sits close by
+      const leftToken = lineItemsSorted[0].str.trim();
+      const seqNum = /^\d{1,4}$/.test(leftToken) ? parseInt(leftToken, 10) : NaN;
+      const isNewRow = !isNaN(seqNum) && seqNum > 0 && seqNum <= 999 && seqNum >= lastSeq;
 
       if(isNewRow){
         if(currentRow) rows.push(currentRow);
@@ -238,7 +247,7 @@ async function parseTableFromPdf(pdf){
         };
         lastSeq = seqNum;
       } else if(currentRow){
-        // continuation line: append text to matching columns (skip footer/header noise lines)
+        // continuation line: append text to matching columns
         if(byCol['DESTINATARIO']) currentRow.destinatario += ' ' + byCol['DESTINATARIO'];
         if(byCol['ENDERECO']) currentRow.endereco += ' ' + byCol['ENDERECO'];
         if(byCol['BAIRRO']) currentRow.bairro += ' ' + byCol['BAIRRO'];
@@ -247,6 +256,7 @@ async function parseTableFromPdf(pdf){
     }
     if(currentRow) rows.push(currentRow);
   }
+
 
   return {rows, totalCharCount};
 }
