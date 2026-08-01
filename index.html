@@ -45,7 +45,8 @@
   table.rows-table th{text-align:left;font-family:var(--mono);font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);}
   table.rows-table td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
   table.rows-table td.seq{font-family:var(--mono);color:var(--ink-dim);width:32px;}
-  table.rows-table td.dest{color:var(--ink-dim);width:190px;max-width:190px;}
+  table.rows-table td.dest{width:190px;max-width:190px;}
+  table.rows-table td.dest input{width:100%;color:var(--ink-dim);}
   table.rows-table td.addr input{width:100%;}
   .table-scroll{max-height:480px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:2px 10px;}
   .row-check{width:16px;height:16px;accent-color:var(--accent-2);}
@@ -87,14 +88,17 @@
 
   <div class="step" id="step2" data-locked="true">
     <h2><span class="step-num">2</span>Revisar endereços<span class="count-badge" id="addrCount" style="display:none"></span></h2>
-    <p class="step-desc">Confira o endereço de cada linha. Desmarque paradas que não quer incluir (ex: duplicadas). Edite o texto se algo veio errado.</p>
+    <p class="step-desc">Confira o endereço e o destinatário de cada linha — ambos são editáveis. Desmarque paradas que não quer incluir (ex: duplicadas). Se uma célula veio com dois endereços grudados, edite a linha existente e use "+ Adicionar endereço manualmente" pra criar uma linha nova com o segundo endereço.</p>
     <div class="step-body">
       <div class="warn-box" id="parseWarn"></div>
       <div class="table-scroll">
         <table class="rows-table" id="rowsTable">
-          <thead><tr><th></th><th>#</th><th>Destinatário</th><th>Endereço completo (para geocodificação)</th></tr></thead>
+          <thead><tr><th></th><th>#</th><th>Destinatário (editável)</th><th>Endereço completo (editável)</th></tr></thead>
           <tbody id="rowsTbody"></tbody>
         </table>
+      </div>
+      <div class="actions-row">
+        <button class="secondary" id="addRowBtn" type="button">+ Adicionar endereço manualmente</button>
       </div>
       <div class="hint">O endereço completo já inclui bairro e CEP formatado, o que ajuda bastante a geocodificação a acertar de primeira.</div>
     </div>
@@ -272,21 +276,42 @@ function buildFullAddress(row){
   return addr;
 }
 
+let rowCounter = 0;
+
 function renderRowsTable(rows){
   rowsTbody.innerHTML = '';
-  rows.forEach((row, idx) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><input type="checkbox" class="row-check" checked data-idx="${idx}"></td>
-      <td class="seq">${row.seq || idx+1}</td>
-      <td class="dest">${row.destinatario || ''}</td>
-      <td class="addr"><input type="text" value="${buildFullAddress(row).replace(/"/g,'&quot;')}" data-idx="${idx}"></td>
-    `;
-    rowsTbody.appendChild(tr);
+  rowCounter = 0;
+  rows.forEach((row) => {
+    appendRowToTable(row.seq || (rowCounter+1), row.destinatario || '', buildFullAddress(row));
   });
-  addrCount.style.display = 'inline-block';
-  addrCount.textContent = rows.length + ' endereço(s)';
+  updateAddrCountLabel();
 }
+
+function appendRowToTable(seqLabel, destValue, addrValue){
+  const idx = rowCounter++;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="checkbox" class="row-check" checked data-idx="${idx}"></td>
+    <td class="seq">${seqLabel}</td>
+    <td class="dest"><input type="text" value="${String(destValue).replace(/"/g,'&quot;')}" data-idx="${idx}"></td>
+    <td class="addr"><input type="text" value="${String(addrValue).replace(/"/g,'&quot;')}" data-idx="${idx}"></td>
+  `;
+  rowsTbody.appendChild(tr);
+  return tr;
+}
+
+function updateAddrCountLabel(){
+  const total = rowsTbody.querySelectorAll('.row-check').length;
+  addrCount.style.display = 'inline-block';
+  addrCount.textContent = total + ' endereço(s)';
+}
+
+document.getElementById('addRowBtn').addEventListener('click', () => {
+  const tr = appendRowToTable('+', '', '');
+  updateAddrCountLabel();
+  tr.querySelector('td.addr input').focus();
+  tr.scrollIntoView({behavior:'smooth', block:'center'});
+});
 
 function getSelectedAddresses(){
   const checks = rowsTbody.querySelectorAll('.row-check');
